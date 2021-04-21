@@ -28,7 +28,7 @@ class BaseClient:
         return data
 
 
-class TraderAPIClient(BaseClient):
+class TraderNetAPIClient(BaseClient):
     _base_url = 'https://tradernet.ru/api'
 
     def __init__(self, secret_key: str, public_key: str):
