@@ -80,15 +80,15 @@ class TraderNetAPIClient(BaseClient):
     def tickers_info_generator(self) -> Generator[Ticker, None, None]:
 
         stock_code_names = self.get_stock_code_names()
-        with ThreadPoolExecutor(max_workers=4) as executor:
+        with ThreadPoolExecutor(max_workers=3) as executor:
             futures = {
                 executor.submit(self.get_ticker_info, stock_code_name)
                 for stock_code_name in stock_code_names
             }
-        for completed_future in as_completed(futures):
-            result = completed_future.result()
-            if result:
-                yield result
+            for completed_future in as_completed(futures):
+                result = completed_future.result()
+                if result:
+                    yield result
 
     def _build_payload(self, cmd: str, params: dict = None) -> dict:
         return {
