@@ -1,4 +1,5 @@
 env/
 dist/
 .env
+.idea/
 *pyc
