@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field, validator, ValidationError
 
 class Ticker(BaseModel):
     market: Literal["MCX", "NASDAQ", "FIX"] = Field(..., alias="ltr")
+    currency: str = Field('RUR', alias='x_curr')
     code_name: str = Field(..., alias="c")
     name_1: str = Field(..., alias="name")
     name_2: str = Field(..., alias='name2')

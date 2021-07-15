@@ -2,6 +2,12 @@ import hmac
 import hashlib
 
 
+def batch(iterable, n=1):
+    size = len(iterable)
+    for ndx in range(0, size, n):
+        yield iterable[ndx:min(ndx + n, size)]
+
+
 def create_hashed_sign(message: bytes, key: bytes) -> str:
     digest = hmac.new(key, msg=message, digestmod=hashlib.sha256)
     return digest.hexdigest()

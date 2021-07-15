@@ -1,11 +1,11 @@
 import time
 import json
-from concurrent.futures import ThreadPoolExecutor, as_completed
-from typing import Optional, Set, Generator
+from typing import Optional, Set, Generator, List
 from pydantic import ValidationError
 from requests import Request, Session, Response
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
-from .utils import create_hashed_sign, http_encode, pre_sign
+from .utils import create_hashed_sign, http_encode, pre_sign, batch
 from .schemas import Ticker
 
 
@@ -28,7 +28,9 @@ class BaseClient:
 
 
 class TraderNetAPIClient(BaseClient):
-    _base_url = 'https://tradernet.ru/api'
+    _base_url = 'https://tradernet.ru'
+    api_url = f'{_base_url}/api'
+    rest_url = f'{_base_url}/securities'
 
     def __init__(self, secret_key: str, public_key: str):
         self.secret_key = secret_key
@@ -45,9 +47,16 @@ class TraderNetAPIClient(BaseClient):
         return session
 
     def send_request(self, cmd: str, params: dict = None):
-        endpoint = f'{self._base_url}/v2/cmd/{cmd}'
+        endpoint = f'{self.api_url}/v2/cmd/{cmd}'
         payload = self._build_payload(cmd, params)
         return self._send_request('post', endpoint, data=payload)
+
+    @staticmethod
+    def _parse_ticker(ticker_data: dict) -> Optional[Ticker]:
+        try:
+            return Ticker(**ticker_data)
+        except ValidationError:
+            return None
 
     def get_ticker_info(self, ticker_name: str) -> Optional[Ticker]:
         cmd = 'getStockQuotesJson'
@@ -56,10 +65,7 @@ class TraderNetAPIClient(BaseClient):
         raw_data: list = response.get("result", {}).get("q", [])
         if len(raw_data) == 0:
             return None
-        try:
-            return Ticker(**raw_data[0])
-        except ValidationError:
-            return None
+        return self._parse_ticker(raw_data[0])
 
     def get_ready_list(self):
         cmd = 'getReadyList'
@@ -67,6 +73,26 @@ class TraderNetAPIClient(BaseClient):
             "mkt": None
         }
         return self.send_request(cmd, params)
+
+    def get_extended_ticker_info(self, code_names: List[str]) -> List[Ticker]:
+        url = f'{self.rest_url}/export?tickers={"+".join(code_names)}'
+        params = {
+            'dataType': 'json',
+        }
+        raw_tickers = self._send_request('GET', url, params)
+        return [self._parse_ticker(ticker) for ticker in raw_tickers]
+
+    def extended_tickers_info_generator(self) -> Generator[Ticker, None, None]:
+        code_names = self.get_stock_code_names()
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            futures = {
+                executor.submit(self.get_extended_ticker_info, batched_code_names)
+                for batched_code_names in batch(list(code_names), 100)
+            }
+            for completed_future in as_completed(futures):
+                result = completed_future.result()
+                if result:
+                    yield result
 
     def get_stock_code_names(self) -> Set[str]:
         code_names = list()
