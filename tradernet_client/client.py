@@ -58,15 +58,6 @@ class TraderNetAPIClient(BaseClient):
         except ValidationError:
             return None
 
-    def get_ticker_info(self, ticker_name: str) -> Optional[Ticker]:
-        cmd = 'getStockQuotesJson'
-        params = {'tickers': ticker_name}
-        response = self.send_request(cmd, params)
-        raw_data: list = response.get("result", {}).get("q", [])
-        if len(raw_data) == 0:
-            return None
-        return self._parse_ticker(raw_data[0])
-
     def get_ready_list(self):
         cmd = 'getReadyList'
         params = {
@@ -74,7 +65,7 @@ class TraderNetAPIClient(BaseClient):
         }
         return self.send_request(cmd, params)
 
-    def get_extended_ticker_info(self, code_names: List[str]) -> List[Ticker]:
+    def get_tickers_info(self, code_names: List[str]) -> List[Ticker]:
         url = f'{self.rest_url}/export?tickers={"+".join(code_names)}'
         params = {
             'dataType': 'json',
@@ -82,17 +73,25 @@ class TraderNetAPIClient(BaseClient):
         raw_tickers = self._send_request('GET', url, params)
         return [self._parse_ticker(ticker) for ticker in raw_tickers]
 
+    def get_ticker_info(self, code_name: str) -> Optional[Ticker]:
+        tickers_info = self.get_tickers_info([code_name])
+        try:
+            return tickers_info[0]
+        except IndexError:
+            return None
+
     def extended_tickers_info_generator(self) -> Generator[Ticker, None, None]:
         code_names = self.get_stock_code_names()
         with ThreadPoolExecutor(max_workers=4) as executor:
             futures = {
-                executor.submit(self.get_extended_ticker_info, batched_code_names)
+                executor.submit(self.get_tickers_info, batched_code_names)
                 for batched_code_names in batch(list(code_names), 100)
             }
             for completed_future in as_completed(futures):
-                result = completed_future.result()
-                if result:
-                    yield result
+                tickers = completed_future.result()
+                for ticker in tickers:
+                    if ticker:
+                        yield ticker
 
     def get_stock_code_names(self) -> Set[str]:
         code_names = list()
@@ -102,19 +101,6 @@ class TraderNetAPIClient(BaseClient):
                 for stock in sector_data['stocks']:
                     code_names.append(stock)
         return set(code_names)
-
-    def tickers_info_generator(self) -> Generator[Ticker, None, None]:
-
-        stock_code_names = self.get_stock_code_names()
-        with ThreadPoolExecutor(max_workers=3) as executor:
-            futures = {
-                executor.submit(self.get_ticker_info, stock_code_name)
-                for stock_code_name in stock_code_names
-            }
-            for completed_future in as_completed(futures):
-                result = completed_future.result()
-                if result:
-                    yield result
 
     def _build_payload(self, cmd: str, params: dict = None) -> dict:
         return {

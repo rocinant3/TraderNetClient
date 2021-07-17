@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "tradernet_client"
-version = "0.4.0"
+version = "0.7.0"
 description = ""
 authors = ["roci <rocinantt@gmail.com>"]
 
@@ -10,6 +10,7 @@ requests = "^2.25.1"
 pydantic = "^1.8.2"
 
 [tool.poetry.dev-dependencies]
+python-decouple = "^3.4"
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]
